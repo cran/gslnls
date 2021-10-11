@@ -1,12 +1,12 @@
-3f948bda00a55970012cf8bd9c5dec1b *DESCRIPTION
+c87c4a3b808b9b646de9a7f7d7bafa18 *DESCRIPTION
 f7e1383d61dbdbf5507706033eaa8714 *NAMESPACE
-b082d6662251546bfe16cc329daadc33 *NEWS.md
+9230bc78a192f9ab9d9b326781d27c5d *NEWS.md
 a85c4bcba0cf702cd9b73061a2b7b4ac *R/nls-methods.R
-ff00ec76e8b5cc9b2393e5145a4ebf7d *R/nls.R
+cb425f11679a842c43ea51cf2802999d *R/nls.R
 9d615f1438ff2cdc7a4344178d36b1de *R/utils.R
 71f74d6190759664a97541542b0331ea *cleanup
-a76f87bfdf75084b28e2ded6424b04bd *configure
-f50b143f5e270d99acf60bdfc9bd1504 *configure.ac
+29b99c4ab880adc50c8df008722e8aaa *configure
+3c16c586d1d3b11bc894323a2223f332 *configure.ac
 459961cb082e4a51b409443daa5f3469 *man/anova.gsl_nls.Rd
 a7cec8897560ac258b9083ddc67588a7 *man/coef.gsl_nls.Rd
 34f421dd9527afc9584960e8ba36460d *man/confintd.Rd
@@ -15,7 +15,7 @@ dc1167368905e4152290e1d704cd4931 *man/deviance.gsl_nls.Rd
 73621c8bf0507e814778265fce3ab592 *man/df.residual.gsl_nls.Rd
 d5cd7341ea74a57c45899222a9e4598d *man/fitted.gsl_nls.Rd
 7c67e5dbc847bf9e8291a8da8965bd6f *man/formula.gsl_nls.Rd
-7bf19ca662b51f935e5545714ecaa657 *man/gsl_nls.Rd
+3413bed2255ca67680753b1346c4ecef *man/gsl_nls.Rd
 dc58662685d1e1bab33c3c373cfc1a7c *man/gsl_nls_control.Rd
 17de3581aca1658e3ccaaf7ba601af7b *man/logLik.gsl_nls.Rd
 eea605be490979ce47e1a96cd63059ef *man/nobs.gsl_nls.Rd
@@ -27,5 +27,5 @@ e904befc40d419a2a37f6b725a51aade *man/summary.gsl_nls.Rd
 bcc4e1150a661f47425a5aaadd659359 *src/Makevars.win
 2641f93ca8b7b038430f643d5f51bd72 *src/gsl_nls.h
 43cf357c4263c06bf1683b80d3bc15f6 *src/init.c
-9d2e4c9078abda5111e4f9cd6f0b05cd *src/nls.c
+cedaa51a39347431ed9148b995f45ae1 *src/nls.c
 b0ce93c37b72a71eff0482d6c1889f6a *tools/winlibs.R
