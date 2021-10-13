@@ -1,12 +1,12 @@
-c87c4a3b808b9b646de9a7f7d7bafa18 *DESCRIPTION
+b088eff56b5a5e865c08fdaf83d825cc *DESCRIPTION
 f7e1383d61dbdbf5507706033eaa8714 *NAMESPACE
-9230bc78a192f9ab9d9b326781d27c5d *NEWS.md
+8be31cae3f0c74c481ceaf0ae79ae58a *NEWS.md
 a85c4bcba0cf702cd9b73061a2b7b4ac *R/nls-methods.R
 cb425f11679a842c43ea51cf2802999d *R/nls.R
 9d615f1438ff2cdc7a4344178d36b1de *R/utils.R
 71f74d6190759664a97541542b0331ea *cleanup
-29b99c4ab880adc50c8df008722e8aaa *configure
-3c16c586d1d3b11bc894323a2223f332 *configure.ac
+b963ebb7cc4bb17ee9ce7226c6c527df *configure
+6dcf7f072e15928b6c9ce08e86addcfb *configure.ac
 459961cb082e4a51b409443daa5f3469 *man/anova.gsl_nls.Rd
 a7cec8897560ac258b9083ddc67588a7 *man/coef.gsl_nls.Rd
 34f421dd9527afc9584960e8ba36460d *man/confintd.Rd
@@ -24,6 +24,7 @@ ec535b6f89779673b2ee347f999635a2 *man/residuals.gsl_nls.Rd
 e904befc40d419a2a37f6b725a51aade *man/summary.gsl_nls.Rd
 4331286aad8b38327dcb9084eac2d555 *man/vcov.gsl_nls.Rd
 0bc61c60e0ceab27cbc6bd28ef3a2b5e *src/Makevars.in
+408abd3a549b87065307dac9f1bc9c99 *src/Makevars.ucrt
 bcc4e1150a661f47425a5aaadd659359 *src/Makevars.win
 2641f93ca8b7b038430f643d5f51bd72 *src/gsl_nls.h
 43cf357c4263c06bf1683b80d3bc15f6 *src/init.c
