@@ -1,19 +1,19 @@
-\name{gsl_nls}
-\alias{gsl_nls}
-\alias{gsl_nls.formula}
-\alias{gsl_nls.function}
-\title{GSL Nonlinear Least Squares fitting}
+\name{gsl_nls_large}
+\alias{gsl_nls_large}
+\alias{gsl_nls_large.formula}
+\alias{gsl_nls_large.function}
+\title{GSL Large-scale Nonlinear Least Squares fitting}
 \usage{
-gsl_nls(fn, ...)
+gsl_nls_large(fn, ...)
 
-\method{gsl_nls}{formula}(
+\method{gsl_nls_large}{formula}(
   fn,
   data = parent.frame(),
   start,
-  algorithm = c("lm", "lmaccel", "dogleg", "ddogleg", "subspace2D"),
+  algorithm = c("cgst", "lm", "lmaccel", "dogleg", "ddogleg", "subspace2D"),
   control = gsl_nls_control(),
-  jac = NULL,
-  fvv = NULL,
+  jac,
+  fvv,
   trace = FALSE,
   subset,
   weights,
@@ -22,14 +22,14 @@ gsl_nls(fn, ...)
   ...
 )
 
-\method{gsl_nls}{function}(
+\method{gsl_nls_large}{function}(
   fn,
   y,
   start,
-  algorithm = c("lm", "lmaccel", "dogleg", "ddogleg", "subspace2D"),
+  algorithm = c("cgst", "lm", "lmaccel", "dogleg", "ddogleg", "subspace2D"),
   control = gsl_nls_control(),
-  jac = NULL,
-  fvv = NULL,
+  jac,
+  fvv,
   trace = FALSE,
   weights,
   ...
@@ -52,7 +52,11 @@ is a \code{formula}, a naive guess for \code{start} is tried, but this should no
 
 \item{algorithm}{character string specifying the algorithm to use. The following choices are supported:
 \itemize{
-\item \code{"lm"} Levenberg-Marquadt algorithm (default)
+\item \code{"cgst"} Steihaug-Toint Conjugate Gradient algorithm (default), a generalization of the dogleg algorithm
+that avoids solving for the Gauss-Newton step directly, instead using an iterative conjugate gradient algorithm.
+The method performs well at points where the Jacobian is singular, and is also suitable for large-scale problems
+where factoring the Jacobian matrix is prohibitively expensive.
+\item \code{"lm"} Levenberg-Marquadt algorithm
 \item \code{"lmaccel"} Levenberg-Marquadt algorithm with geodesic acceleration.
 Can be faster than \code{"lm"} but less stable. Stability is controlled by the
 \code{avmax} parameter in \code{control}, setting \code{avmax} to zero is analogous
@@ -69,26 +73,25 @@ on some problems.
 \item{control}{an optional list of control parameters to tune the least squares iterations.
 See \code{\link{gsl_nls_control}} for the available control parameters and their default values.}
 
-\item{jac}{either \code{NULL} (default) or a \link{function} returning the \code{n} by \code{p} dimensional Jacobian matrix of
+\item{jac}{a \link{function} returning the \code{n} by \code{p} dimensional Jacobian matrix of
 the nonlinear model \code{fn}, where \code{n} is the number of observations and \code{p} the
-number of parameters. If a function, the first argument must be the vector of parameters of length \code{p}.
-If \code{NULL}, the Jacobian is computed internally using a finite difference approximations.
+number of parameters. The first argument must be the vector of parameters of length \code{p}.
 Can also be \code{TRUE}, in which case \code{jac} is derived symbolically with \code{\link[stats]{deriv}},
 this only works if \code{fn} is defined as a (non-selfstarting) formula. If \code{fn} is a \code{\link{selfStart}} model,
 the Jacobian specified in the \code{"gradient"} attribute of the self-start model is used instead.}
 
-\item{fvv}{either \code{NULL} (default) or a \link{function} returning an \code{n} dimensional vector containing
+\item{fvv}{a \link{function} returning an \code{n} dimensional vector containing
 the second directional derivatives of the nonlinear model \code{fn}, with \code{n} the number of observations.
 This argument is only used if geodesic acceleration is enabled (\code{algorithm = "lmaccel"}).
-If a function, the first argument must be the vector of parameters of length \code{p} and the second argument must be the velocity vector
-also of length \code{p}. If \code{NULL}, the second directional derivative vector is computed internal
-using a finite difference approximation. Can also be \code{TRUE}, in which case \code{fvv} is derived
+The first argument must be the vector of parameters of length \code{p} and the second argument must be the velocity vector
+also of length \code{p}. Can also be \code{TRUE}, in which case \code{fvv} is derived
 symbolically with \code{\link[stats]{deriv}}, this only works if \code{fn} is defined as a (non-selfstarting) formula.
 If the model \link{function} in \code{fn} also returns a \code{"hessian"} attribute (similar to the \code{"gradient"} attribute
 in a \code{selfStart} model), this Hessian matrix is used to evaluate the second directional derivatives instead.}
 
 \item{trace}{logical value indicating if a trace of the iteration progress should be printed.
-Default is \code{FALSE}. If \code{TRUE}, the residual (weighted) sum-of-squares and the current parameter estimates
+Default is \code{FALSE}. If \code{TRUE}, the residual (weighted) sum-of-squares,
+the squared (Euclidean) norm of the current parameter estimates and the condition number of the Jacobian
 are printed after each iteration.}
 
 \item{subset}{an optional vector specifying a subset of observations to be used in the fitting process.
@@ -116,8 +119,8 @@ See the individual method descriptions for the structures of the returned lists 
 applicable to objects of both classes.
 }
 \description{
-Determine the nonlinear least-squares estimates of the parameters of a
-nonlinear model using the \code{gsl_multifit_nlinear} module present in
+Determine the nonlinear least-squares estimates of the parameters of a large
+nonlinear model system using the \code{gsl_multilarge_nlinear} module present in
 the GNU Scientific Library (GSL).
 }
 \section{Methods (by class)}{
@@ -141,134 +144,71 @@ is available for inference of derived parameters.
 }}
 
 \examples{
-# Example 1: exponential model
-# (https://www.gnu.org/software/gsl/doc/html/nls.html#exponential-fitting-example)
+# Large NLS example
+# (https://www.gnu.org/software/gsl/doc/html/nls.html#large-nonlinear-least-squares-example)
 
-## data
-set.seed(1)
-n <- 50
-x <- (seq_len(n) - 1) * 3 / (n - 1)
-f <- function(A, lam, b, x) A * exp(-lam * x) + b
-y <- f(A = 5, lam = 1.5, b = 1, x) + rnorm(n, sd = 0.25)
+## number of parameters
+p <- 250
 
-## model fit
-ex1_fit <- gsl_nls(
-  fn = y ~ A * exp(-lam * x) + b,                        ## model formula
-  data = data.frame(x = x, y = y),                       ## model fit data
-  start = c(A = 0, lam = 0, b = 0)                       ## starting values
-)
-summary(ex1_fit)                                         ## model summary
-predict(ex1_fit, interval = "prediction")                ## prediction intervals
-
-## analytic Jacobian 1
-gsl_nls(
-  fn = y ~ A * exp(-lam * x) + b,                        ## model formula
-  data = data.frame(x = x, y = y),                       ## model fit data
-  start = c(A = 0, lam = 0, b = 0),                      ## starting values
-  jac = function(par) with(as.list(par),                 ## jacobian
-    cbind(A = exp(-lam * x), lam = -A * x * exp(-lam * x), b = 1)
-  )
-)
-
-## analytic Jacobian 2
-gsl_nls(
-  fn = y ~ A * exp(-lam * x) + b,                        ## model formula
-  data = data.frame(x = x, y = y),                       ## model fit data
-  start = c(A = 0, lam = 0, b = 0),                      ## starting values
-  jac = TRUE                                             ## automatic derivation
-)
-
-## self-starting model
-gsl_nls(
-  fn =  y ~ SSasymp(x, Asym, R0, lrc),                   ## model formula
-  data = data.frame(x = x, y = y)                        ## model fit data
-)
-
-# Example 2: Gaussian function
-# (https://www.gnu.org/software/gsl/doc/html/nls.html#geodesic-acceleration-example-2)
-
-## data
-set.seed(1)
-n <- 300
-x <- seq_len(n) / n
-f <- function(a, b, c, x) a * exp(-(x - b)^2 / (2 * c^2))
-y <- f(a = 5, b = 0.4, c = 0.15, x) * rnorm(n, mean = 1, sd = 0.1)
-
-## Levenberg-Marquadt (default)
-gsl_nls(
-  fn = y ~ a * exp(-(x - b)^2 / (2 * c^2)),             ## model formula
-  data = data.frame(x = x, y = y),                      ## model fit data
-  start = c(a = 1, b = 0, c = 1),                       ## starting values
-  trace = TRUE                                          ## verbose output
-)
-
-## Levenberg-Marquadt w/ geodesic acceleration 1
-gsl_nls(
-  fn = y ~ a * exp(-(x - b)^2 / (2 * c^2)),             ## model formula
-  data = data.frame(x = x, y = y),                      ## model fit data
-  start = c(a = 1, b = 0, c = 1),                       ## starting values
-  algorithm = "lmaccel",                                ## algorithm
-  trace = TRUE                                          ## verbose output
-)
-
-## Levenberg-Marquadt w/ geodesic acceleration 2
-## second directional derivative
-fvv <- function(par, v, x) {
-  with(as.list(par), {
-    zi <- (x - b) / c
-    ei <- exp(-zi^2 / 2)
-    2 * v[["a"]] * v[["b"]] * zi / c * ei + 2 * v[["a"]] * v[["c"]] * zi^2 / c * ei -
-      v[["b"]]^2 * a / c^2 * (1 - zi^2) * ei -
-      2 * v[["b"]] * v[["c"]] * a / c^2 * zi * (2 - zi^2) * ei -
-      v[["c"]]^2 * a / c^2 * zi^2 * (3 - zi^2) * ei
-  })
+## model function
+f <- function(theta) {
+  c(sqrt(1e-5) * (theta - 1), sum(theta^2) - 0.25)
 }
 
-## analytic fvv 1
-gsl_nls(
-  fn = y ~ a * exp(-(x - b)^2 / (2 * c^2)),             ## model formula
-  data = data.frame(x = x, y = y),                      ## model fit data
-  start = c(a = 1, b = 0, c = 1),                       ## starting values
-  algorithm = "lmaccel",                                ## algorithm
-  trace = TRUE,                                         ## verbose output
-  fvv = fvv,                                            ## analytic fvv
-  x = x                                                 ## argument passed to fvv
-)
-
-## analytic fvv 2
-gsl_nls(
-  fn = y ~ a * exp(-(x - b)^2 / (2 * c^2)),             ## model formula
-  data = data.frame(x = x, y = y),                      ## model fit data
-  start = c(a = 1, b = 0, c = 1),                       ## starting values
-  algorithm = "lmaccel",                                ## algorithm
-  trace = TRUE,                                         ## verbose output
-  fvv = TRUE                                            ## automatic derivation
-)
-
-# Example 3: Branin function
-# (https://www.gnu.org/software/gsl/doc/html/nls.html#comparing-trs-methods-example)
-
-## Branin model function
-branin <- function(x) {
-  a <- c(-5.1 / (4 * pi^2), 5 / pi, -6, 10, 1 / (8 * pi))
-  f1 <- x[2] + a[1] * x[1]^2 + a[2] * x[1] + a[3]
-  f2 <- sqrt(a[4] * (1 + (1 - a[5]) * cos(x[1])))
-  c(f1, f2)
+## jacobian function
+jac <- function(theta) {
+  rbind(diag(sqrt(1e-5), nrow = length(theta)), 2 * t(theta))
 }
 
-## Dogleg minimization w/ model as function
-gsl_nls(
-  fn = branin,                   ## model function
-  y = c(0, 0),                   ## response vector
-  start = c(x1 = 6, x2 = 14.5),  ## starting values
-  algorithm = "dogleg"           ## algorithm
+## dense Levenberg-Marquadt
+gsl_nls_large(
+  fn = f,                       ## model
+  y = rep(0, p + 1),            ## (dummy) responses
+  start = 1:p,                  ## start values
+  algorithm = "lm",             ## algorithm
+  jac = jac,                    ## jacobian
+  control = list(maxiter = 250)
 )
+
+## dense Steihaug-Toint conjugate gradient
+gsl_nls_large(
+  fn = f,                       ## model
+  y = rep(0, p + 1),            ## (dummy) responses
+  start = 1:p,                  ## start values
+  jac = jac,                    ## jacobian
+  algorithm = "cgst"            ## algorithm
+)
+
+## sparse Jacobian function
+jacsp <- function(theta) {
+  rbind(Matrix::Diagonal(x = sqrt(1e-5), n = length(theta)), 2 * t(theta))
+}
+
+## sparse Levenberg-Marquadt
+gsl_nls_large(
+  fn = f,                       ## model
+  y = rep(0, p + 1),            ## (dummy) responses
+  start = 1:p,                  ## start values
+  algorithm = "lm",             ## algorithm
+  jac = jacsp,                  ## sparse jacobian
+  control = list(maxiter = 250)
+)
+
+## sparse Steihaug-Toint conjugate gradient
+gsl_nls_large(
+  fn = f,                       ## model
+  y = rep(0, p + 1),            ## (dummy) responses
+  start = 1:p,                  ## start values
+  jac = jacsp,                  ## sparse jacobian
+  algorithm = "cgst"            ## algorithm
+)
+
 }
 \references{
 M. Galassi et al., \emph{GNU Scientific Library Reference Manual (3rd Ed.)}, ISBN 0954612078.
 }
 \seealso{
-\code{\link[stats]{nls}}
+\code{\link{gsl_nls}}
 
 \url{https://www.gnu.org/software/gsl/doc/html/nls.html}
 }
