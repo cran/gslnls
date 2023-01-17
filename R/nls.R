@@ -16,8 +16,8 @@
 #' is a \code{formula}, a naive guess for \code{start} is tried, but this should not be relied on.
 #' @param algorithm character string specifying the algorithm to use. The following choices are supported:
 #' \itemize{
-#' \item \code{"lm"} Levenberg-Marquadt algorithm (default)
-#' \item \code{"lmaccel"} Levenberg-Marquadt algorithm with geodesic acceleration.
+#' \item \code{"lm"} Levenberg-Marquardt algorithm (default)
+#' \item \code{"lmaccel"} Levenberg-Marquardt algorithm with geodesic acceleration.
 #' Can be faster than \code{"lm"} but less stable. Stability is controlled by the
 #' \code{avmax} parameter in \code{control}, setting \code{avmax} to zero is analogous
 #' to not using geodesic acceleration.
@@ -126,7 +126,7 @@
 #' f <- function(a, b, c, x) a * exp(-(x - b)^2 / (2 * c^2))
 #' y <- f(a = 5, b = 0.4, c = 0.15, x) * rnorm(n, mean = 1, sd = 0.1)
 #'
-#' ## Levenberg-Marquadt (default)
+#' ## Levenberg-Marquardt (default)
 #' gsl_nls(
 #'   fn = y ~ a * exp(-(x - b)^2 / (2 * c^2)),             ## model formula
 #'   data = data.frame(x = x, y = y),                      ## model fit data
@@ -134,7 +134,7 @@
 #'   trace = TRUE                                          ## verbose output
 #' )
 #'
-#' ## Levenberg-Marquadt w/ geodesic acceleration 1
+#' ## Levenberg-Marquardt w/ geodesic acceleration 1
 #' gsl_nls(
 #'   fn = y ~ a * exp(-(x - b)^2 / (2 * c^2)),             ## model formula
 #'   data = data.frame(x = x, y = y),                      ## model fit data
@@ -143,7 +143,7 @@
 #'   trace = TRUE                                          ## verbose output
 #' )
 #'
-#' ## Levenberg-Marquadt w/ geodesic acceleration 2
+#' ## Levenberg-Marquardt w/ geodesic acceleration 2
 #' ## second directional derivative
 #' fvv <- function(par, v, x) {
 #'   with(as.list(par), {
@@ -430,7 +430,7 @@ gsl_nls.formula <- function(fn, data = parent.frame(), start,
     control <- as.list(control)
     .ctrl[names(control)] <- control
   }
-  .ctrl$scale <- match.arg(.ctrl$scale, c("more", "levenberg", "marquadt"))
+  .ctrl$scale <- match.arg(.ctrl$scale, c("more", "levenberg", "marquardt"))
   .ctrl$solver <- match.arg(.ctrl$solver, c("qr", "cholesky", "svd"))
   .ctrl$fdtype <- match.arg(.ctrl$fdtype, c("forward", "center"))
   stopifnot(
@@ -448,7 +448,7 @@ gsl_nls.formula <- function(fn, data = parent.frame(), start,
       as.integer(.ctrl$maxiter),
       isTRUE(trace),
       match(algorithm, c("lm", "lmaccel", "dogleg", "ddogleg", "subspace2D")) - 1L,
-      match(.ctrl$scale, c("more", "levenberg", "marquadt")) - 1L,
+      match(.ctrl$scale, c("more", "levenberg", "marquardt")) - 1L,
       match(.ctrl$solver, c("qr", "cholesky", "svd")) - 1L,
       match(.ctrl$fdtype, c("forward", "center")) - 1L
   )
@@ -581,7 +581,7 @@ gsl_nls.function <- function(fn, y, start,
     control <- as.list(control)
     .ctrl[names(control)] <- control
   }
-  .ctrl$scale <- match.arg(.ctrl$scale, c("more", "levenberg", "marquadt"))
+  .ctrl$scale <- match.arg(.ctrl$scale, c("more", "levenberg", "marquardt"))
   .ctrl$solver <- match.arg(.ctrl$solver, c("qr", "cholesky", "svd"))
   .ctrl$fdtype <- match.arg(.ctrl$fdtype, c("forward", "center"))
   stopifnot(
@@ -599,7 +599,7 @@ gsl_nls.function <- function(fn, y, start,
       as.integer(.ctrl$maxiter),
       isTRUE(trace),
       match(algorithm, c("lm", "lmaccel", "dogleg", "ddogleg", "subspace2D")) - 1L,
-      match(.ctrl$scale, c("more", "levenberg", "marquadt")) - 1L,
+      match(.ctrl$scale, c("more", "levenberg", "marquardt")) - 1L,
       match(.ctrl$solver, c("qr", "cholesky", "svd")) - 1L,
       match(.ctrl$fdtype, c("forward", "center")) - 1L
   )
@@ -661,7 +661,7 @@ gsl_nls.function <- function(fn, y, start,
 #' been proven effective on a large class of problems.
 #' \item \code{"levenberg"} Levenberg rescaling. This method has also proven effective on a large class of problems,
 #' but is not scale-invariant. It may perform better for problems susceptible to \emph{parameter evaporation} (parameters going to infinity).
-#' \item \code{"marquadt"} Marquadt rescaling. This method is scale-invariant, but it is generally
+#' \item \code{"marquardt"} Marquardt rescaling. This method is scale-invariant, but it is generally
 #' considered inferior to both the Levenberg and Moré strategies.
 #' }
 #' @param solver character, method used to solve the linear least squares system resulting as a subproblem in each iteration.
@@ -681,9 +681,9 @@ gsl_nls.function <- function(fn, y, start,
 #' approximation of the Jacobian matrix is not available and this parameter is only used to numerically approximate
 #' the second-order derivatives (if geodesic acceleration is used).
 #' @param factor_up numeric factor by which to increase the trust region radius when a search step is accepted.
-#' Too large values may destabilize the search, too small values slow down the search, defaults to 3.
-#' @param factor_down numeric factor by which to decrease the trust region radius when a search step is rejected.
 #' Too large values may destabilize the search, too small values slow down the search, defaults to 2.
+#' @param factor_down numeric factor by which to decrease the trust region radius when a search step is rejected.
+#' Too large values may destabilize the search, too small values slow down the search, defaults to 3.
 #' @param avmax numeric value, the ratio of the acceleration term to the velocity term when using geodesic acceleration to
 #' solve the nonlinear least squares problem. Any steps with a ratio larger than \code{avmax} are rejected, defaults to 0.75.
 #' For problems which experience difficulty converging, this threshold could be lowered.
@@ -724,11 +724,11 @@ gsl_nls.function <- function(fn, y, start,
 #' @references M. Galassi et al., \emph{GNU Scientific Library Reference Manual (3rd Ed.)}, ISBN 0954612078.
 #' @export
 gsl_nls_control <- function(maxiter = 50, scale = "more", solver = "qr",
-    fdtype = "forward", factor_up = 3, factor_down = 2, avmax = 0.75,
+    fdtype = "forward", factor_up = 2, factor_down = 3, avmax = 0.75,
     h_df = sqrt(.Machine$double.eps), h_fvv = 0.02, xtol = sqrt(.Machine$double.eps),
     ftol = sqrt(.Machine$double.eps), gtol = .Machine$double.eps^(1/3)) {
 
-  scale <- match.arg(scale, c("more", "levenberg", "marquadt"))
+  scale <- match.arg(scale, c("more", "levenberg", "marquardt"))
   solver <- match.arg(solver, c("qr", "cholesky", "svd"))
   fdtype <- match.arg(fdtype, c("forward", "center"))
 
