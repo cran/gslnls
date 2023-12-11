@@ -218,7 +218,7 @@ SEXP C_nls_large_internal(void *data)
     }
 
     /* compute initial cost function */
-    double chisq_init = GSL_POSINF;
+    double chisq_init = (double)GSL_POSINF;
     gsl_vector *resid = gsl_multilarge_nlinear_residual(pars->w);
     gsl_blas_ddot(resid, resid, &chisq_init);
     double chisq0 = chisq_init;
@@ -236,7 +236,7 @@ SEXP C_nls_large_internal(void *data)
     /* solve the system  */
     int info = GSL_CONTINUE;
     int status = gsl_multilarge_nlinear_driver2(niter, xtol, gtol, ftol, verbose ? callback_large : NULL, verbose ? &params : NULL, &info, &chisq0, &chisq1, pars->w);
-    R_len_t iter = gsl_multilarge_nlinear_niter(pars->w);
+    R_len_t iter = (R_len_t)gsl_multilarge_nlinear_niter(pars->w);
 
     /* compute covariance and cost at best fit parameters */
     gsl_matrix *cov = NULL;
@@ -256,10 +256,10 @@ SEXP C_nls_large_internal(void *data)
         Rprintf("final ssr = %g\n", chisq1);
         Rprintf("ssr/dof = %g\n", chisq1 / (n - p));
         Rprintf("ssr achieved tolerance = %g\n", chisq0 - chisq1);
-        Rprintf("function evaluations: %d\n", fdf.nevalf);
-        Rprintf("jacobian-vector product evaluations: %d\n", fdf.nevaldfu);
-        Rprintf("jacobian-jacobian product evaluations: %d\n", fdf.nevaldf2);
-        Rprintf("fvv evaluations: %d\n", fdf.nevalfvv);
+        Rprintf("function evaluations: %d\n", (int)fdf.nevalf);
+        Rprintf("jacobian-vector product evaluations: %d\n", (int)fdf.nevaldfu);
+        Rprintf("jacobian-jacobian product evaluations: %d\n", (int)fdf.nevaldf2);
+        Rprintf("fvv evaluations: %d\n", (int)fdf.nevalfvv);
         Rprintf("status = %s\n*******************\n", gsl_strerror(status));
     }
 
@@ -385,10 +385,10 @@ SEXP C_nls_large_internal(void *data)
 
     const char *nms[] = {"f", "dfu", "df2", "fvv", ""};
     SEXP ansneval = PROTECT(Rf_mkNamed(INTSXP, nms));
-    SET_INTEGER_ELT(ansneval, 0, fdf.nevalf);
-    SET_INTEGER_ELT(ansneval, 1, fdf.nevaldfu);
-    SET_INTEGER_ELT(ansneval, 2, fdf.nevaldf2);
-    SET_INTEGER_ELT(ansneval, 3, fdf.nevalfvv);
+    SET_INTEGER_ELT(ansneval, 0, (R_len_t)fdf.nevalf);
+    SET_INTEGER_ELT(ansneval, 1, (R_len_t)fdf.nevaldfu);
+    SET_INTEGER_ELT(ansneval, 2, (R_len_t)fdf.nevaldf2);
+    SET_INTEGER_ELT(ansneval, 3, (R_len_t)fdf.nevalfvv);
     SET_VECTOR_ELT(ans, 10, ansneval);
     UNPROTECT(1);
 
@@ -444,11 +444,11 @@ GSL_EBADFUNC if function evaluation failed
 GSL_MAXITER if maxiter exceeded without converging
 GSL_ENOPROG if no accepted step found on first iteration
 */
-int gsl_multilarge_nlinear_driver2(const size_t maxiter,
+int gsl_multilarge_nlinear_driver2(const R_len_t maxiter,
                                    const double xtol,
                                    const double gtol,
                                    const double ftol,
-                                   void (*callback)(const size_t iter, void *params,
+                                   void (*callback)(const R_len_t iter, void *params,
                                                     const gsl_multilarge_nlinear_workspace *w),
                                    void *callback_params,
                                    int *info,
@@ -457,7 +457,7 @@ int gsl_multilarge_nlinear_driver2(const size_t maxiter,
                                    gsl_multilarge_nlinear_workspace *w)
 {
     int status = GSL_CONTINUE;
-    size_t iter = 0;
+    R_len_t iter = 0;
     gsl_vector *f = NULL;
 
     do
@@ -698,11 +698,11 @@ int gsl_df_large(CBLAS_TRANSPOSE_t TransJ, const gsl_vector *x, const gsl_vector
     return GSL_SUCCESS;
 }
 
-void callback_large(const size_t iter, void *params, const gsl_multilarge_nlinear_workspace *w)
+void callback_large(const R_len_t iter, void *params, const gsl_multilarge_nlinear_workspace *w)
 {
     /* ssr trace */
     double chisq = ((fdata_large *)params)->chisq;
-    SET_REAL_ELT(((fdata_large *)params)->ssrtrace, (R_len_t)iter, chisq);
+    SET_REAL_ELT(((fdata_large *)params)->ssrtrace, iter, chisq);
 
     /* parameter trace */
     R_len_t p = ((fdata_large *)params)->p;
