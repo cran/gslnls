@@ -10,12 +10,12 @@
 #' is a \code{formula}, a naive guess for \code{start} is tried, but this should not be relied on.
 #' @param algorithm character string specifying the algorithm to use. The following choices are supported:
 #' \itemize{
-#' \item \code{"lm"} Levenberg-Marquardt algorithm (default)
+#' \item \code{"lm"} Levenberg-Marquardt algorithm (default).
 #' \item \code{"lmaccel"} Levenberg-Marquardt algorithm with geodesic acceleration.
 #' Can be faster than \code{"lm"} but less stable. Stability is controlled by the
 #' \code{avmax} parameter in \code{control}, setting \code{avmax} to zero is analogous
 #' to not using geodesic acceleration.
-#' \item \code{"dogleg"} Powell's dogleg algorithm
+#' \item \code{"dogleg"} Powell's dogleg algorithm.
 #' \item \code{"ddogleg"} Double dogleg algorithm, an improvement over \code{"dogleg"}
 #' by including information about the Gauss-Newton step while the iteration is still
 #' far from the minimum.
@@ -72,6 +72,7 @@
 #' }
 #'
 #' ## dense Levenberg-Marquardt
+#' \donttest{
 #' gsl_nls_large(
 #'   fn = f,                       ## model
 #'   y = rep(0, p + 1),            ## (dummy) responses
@@ -80,8 +81,10 @@
 #'   jac = jac,                    ## jacobian
 #'   control = list(maxiter = 250)
 #' )
+#' }
 #'
 #' ## dense Steihaug-Toint conjugate gradient
+#' \donttest{
 #' gsl_nls_large(
 #'   fn = f,                       ## model
 #'   y = rep(0, p + 1),            ## (dummy) responses
@@ -89,6 +92,7 @@
 #'   jac = jac,                    ## jacobian
 #'   algorithm = "cgst"            ## algorithm
 #' )
+#' }
 #'
 #' ## sparse Jacobian function
 #' jacsp <- function(theta) {
@@ -364,7 +368,7 @@ gsl_nls_large.formula <- function(fn, data = parent.frame(), start,
   .ctrl$solver <- "cholesky"  ## fixed
   .ctrl$fdtype <- match.arg(.ctrl$fdtype, c("forward", "center"))
   stopifnot(
-    is.numeric(.ctrl$maxiter), length(.ctrl$maxiter) == 1, .ctrl$maxiter > 0,
+    is.numeric(.ctrl$maxiter), length(.ctrl$maxiter) == 1, .ctrl$maxiter >= 1,
     is.numeric(.ctrl$factor_up), length(.ctrl$factor_up) == 1, .ctrl$factor_up > 0,
     is.numeric(.ctrl$factor_down), length(.ctrl$factor_down) == 1, .ctrl$factor_down > 0,
     is.numeric(.ctrl$avmax), length(.ctrl$avmax) == 1, .ctrl$avmax > 0,
@@ -541,7 +545,7 @@ gsl_nls_large.function <- function(fn, y, start,
   .ctrl$solver <- "cholesky"  ## fixed
   .ctrl$fdtype <- match.arg(.ctrl$fdtype, c("forward", "center"))
   stopifnot(
-    is.numeric(.ctrl$maxiter), length(.ctrl$maxiter) == 1, .ctrl$maxiter > 0,
+    is.numeric(.ctrl$maxiter), length(.ctrl$maxiter) == 1, .ctrl$maxiter >= 1,
     is.numeric(.ctrl$factor_up), length(.ctrl$factor_up) == 1, .ctrl$factor_up > 0,
     is.numeric(.ctrl$factor_down), length(.ctrl$factor_down) == 1, .ctrl$factor_down > 0,
     is.numeric(.ctrl$avmax), length(.ctrl$avmax) == 1, .ctrl$avmax > 0,

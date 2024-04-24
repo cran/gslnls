@@ -6,6 +6,7 @@
 
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_matrix.h>
+#include <gsl/gsl_linalg.h>
 #include <gsl/gsl_spmatrix.h>
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_blas.h>
@@ -25,15 +26,21 @@ typedef struct
     SEXP env;                          // function environment
     SEXP start;                        // start parameter values
     SEXP swts;                         // weights
+    SEXP lupars;                       // lower/upper parameter bounds
     SEXP control_int;                  // integer control paramaters
     SEXP control_dbl;                  // double control paramaters
+    SEXP has_start;                    // flags if starting values fixed
     gsl_multifit_nlinear_workspace *w; // workspace
     gsl_vector *wts;                   // weights vector
     gsl_qrng *q;                       // qrng workspace
     gsl_matrix *mx;                    // multistart initial value matrix
     gsl_vector *mp;                    // multistart parameter placeholder vector
     gsl_vector *mpopt;                 // multistart optimal parameter vector
+    gsl_vector *mpopt1;                // multistart back-up parameter vector
     gsl_vector *diag;                  // diagonal of scaling matrix D_k
+    gsl_matrix *lu;                    // lower/upper parameter bounds
+    gsl_matrix *JTJ;                   // workspace hessian matrix Jt * J
+    gsl_vector *workn;                 // workspace n-length vector 
 } pdata;
 
 typedef struct
@@ -50,7 +57,17 @@ typedef struct
     SEXP partrace; // parameter trace
     SEXP ssrtrace; // ssr trace
     Rboolean warn; // print R warnings
+    int startisnum;  // are start values numeric?
 } fdata;
+
+/* store info found local optima */
+typedef struct
+{
+    double *mpall;    // all found local optima
+    double *mpradii;  // trust region radii of all found local optima
+    R_len_t mpcount;  // current number of local optima
+    R_len_t mpmax;    // maximum number of local optima
+} mpoptinfo;
 
 typedef struct
 {
@@ -63,16 +80,26 @@ typedef struct
     R_len_t minsp;    // minimum number of stationary points
     double r;         // stopping criterion nwsp >= r * nsp
     double tol;       // start local search if mssr < (1 + tol) * mssropt
+    double dtol;      // discard point if det(J^T * J) < dtol
     int *ntix;        // persistent index counter across major iters
     double *qmp;      // quasirandom samples
-    double *startptr; // pointer to start value matrix
+    double *start;    // start value workspace
+    double *maxlims;  // store maximum parameter limits
     int *mssr_order;  // ordered ssr's
     int mstop;        // stop status
     R_len_t mstarts;  // current number of major iteration
     R_len_t nsp;      // current number of stationary points
     R_len_t nwsp;     // current number of worse stationary points
-    double mssropt;   // current optimal ssr
+    double mssropt[2]; // current optimal ssr + back-up
+    double ssrconv[2];   // current convergence tolerance + back-up
+    int all_start;    // flag if any dynamic lower/upper sampling limits
+    int *has_start;   // flags fixed lower/upper sampling limits
+    int *luchange;    // force change in lower/upper sampling limits
+    double rejectscl; // scaling factor parameter rejection limits
+    mpoptinfo *mpopt; // store all found local optima (currently not)
 } mdata;
+
+
 
 /* from multifit_nlinear/trust.c */
 typedef struct
@@ -96,39 +123,24 @@ typedef struct
 
 // double wgt(double x, double *c, int i);
 
-int gsl_f(const gsl_vector *x, void *params, gsl_vector *f);
+int trust_iterate_lu(void *vstate,
+                     const gsl_vector *swts,
+                     gsl_multifit_nlinear_fdf *fdf,
+                     gsl_vector *x,
+                     gsl_vector *f,
+                     gsl_matrix *J,
+                     gsl_vector *g,
+                     gsl_vector *dx,
+                     const gsl_matrix *lu);
 
-/* deprecated */
-// int gsl_evalf(SEXP par, fdata *params, gsl_vector *f);
+double det_cholesky_jtj(gsl_matrix *J, gsl_matrix *JTJ);
 
-int gsl_df(const gsl_vector *x, void *params, gsl_matrix *J);
+double det_eval_jtj(const gsl_multifit_nlinear_parameters params,
+                    const gsl_vector *swts, gsl_multifit_nlinear_fdf *fdf,
+                    const gsl_vector *x, gsl_vector *f, gsl_matrix *J,
+                    gsl_matrix *JTJ, gsl_vector *workn);
 
-int gsl_fvv(const gsl_vector *x, const gsl_vector *v, void *params, gsl_vector *fvv);
-
-void callback(const R_len_t iter, void *params, const gsl_multifit_nlinear_workspace *w);
-
-int gsl_multifit_nlinear_driver2(const R_len_t maxiter,
-                                 const double xtol,
-                                 const double gtol,
-                                 const double ftol,
-                                 void (*callback)(const R_len_t iter, void *params,
-                                                  const gsl_multifit_nlinear_workspace *w),
-                                 void *callback_params,
-                                 int *info,
-                                 double *chisq0,
-                                 double *chisq1,
-                                 gsl_multifit_nlinear_workspace *w);
-
-void gsl_multistart_driver(pdata *pars,
-                           mdata *mpars,
-                           gsl_multifit_nlinear_fdf *fdff,
-                           SEXP mssr,
-                           const double xtol,
-                           const double ftol,
-                           const double gtol,
-                           Rboolean verbose);
-
-SEXP C_nls(SEXP fn, SEXP y, SEXP jac, SEXP fvv, SEXP env, SEXP start, SEXP swts, SEXP control_int, SEXP control_dbl);
+SEXP C_nls(SEXP fn, SEXP y, SEXP jac, SEXP fvv, SEXP env, SEXP start, SEXP swts, SEXP lupars, SEXP control_int, SEXP control_dbl, SEXP has_start);
 
 SEXP C_nls_internal(void *data);
 
@@ -166,22 +178,6 @@ typedef struct
     gsl_matrix *J;     // jacobian matrix
     gsl_spmatrix *Jsp; // sparse jacobian matrix
 } fdata_large;
-
-int gsl_df_large(CBLAS_TRANSPOSE_t TransJ, const gsl_vector *x, const gsl_vector *u, void *params, gsl_vector *v, gsl_matrix *JTJ);
-
-void callback_large(const R_len_t iter, void *params, const gsl_multilarge_nlinear_workspace *w);
-
-int gsl_multilarge_nlinear_driver2(const R_len_t maxiter,
-                                   const double xtol,
-                                   const double gtol,
-                                   const double ftol,
-                                   void (*callback)(const R_len_t iter, void *params,
-                                                    const gsl_multilarge_nlinear_workspace *w),
-                                   void *callback_params,
-                                   int *info,
-                                   double *chisq0,
-                                   double *chisq1,
-                                   gsl_multilarge_nlinear_workspace *w);
 
 SEXP C_nls_large(SEXP fn, SEXP y, SEXP jac, SEXP fvv, SEXP env, SEXP start, SEXP swts, SEXP control_int, SEXP control_dbl);
 

@@ -22,7 +22,7 @@ gsl_nls_large(fn, ...)
   ...
 )
 
-\method{gsl_nls_large}{`function`}(
+\method{gsl_nls_large}{function}(
   fn,
   y,
   start,
@@ -52,12 +52,12 @@ is a \code{formula}, a naive guess for \code{start} is tried, but this should no
 
 \item{algorithm}{character string specifying the algorithm to use. The following choices are supported:
 \itemize{
-\item \code{"lm"} Levenberg-Marquardt algorithm (default)
+\item \code{"lm"} Levenberg-Marquardt algorithm (default).
 \item \code{"lmaccel"} Levenberg-Marquardt algorithm with geodesic acceleration.
 Can be faster than \code{"lm"} but less stable. Stability is controlled by the
 \code{avmax} parameter in \code{control}, setting \code{avmax} to zero is analogous
 to not using geodesic acceleration.
-\item \code{"dogleg"} Powell's dogleg algorithm
+\item \code{"dogleg"} Powell's dogleg algorithm.
 \item \code{"ddogleg"} Double dogleg algorithm, an improvement over \code{"dogleg"}
 by including information about the Gauss-Newton step while the iteration is still
 far from the minimum.
@@ -131,7 +131,7 @@ Therefore, all generic functions applicable to objects of class \code{nls}, such
 \code{residuals}, \code{summary}, \code{vcov} and \code{weights} are also applicable to the returned list object.
 In addition, a method \code{confintd} is available for inference of derived parameters.
 
-\item \code{gsl_nls_large(`function`)}: If \code{fn} is a \code{function}, the first argument must be the vector of parameters and
+\item \code{gsl_nls_large(function)}: If \code{fn} is a \code{function}, the first argument must be the vector of parameters and
 the function should return a numeric vector containing the nonlinear model evaluations at
 the provided parameter and predictor or covariate vectors. In addition, the argument \code{y}
 needs to contain the numeric vector of observed responses, equal in length to the numeric
@@ -161,6 +161,7 @@ jac <- function(theta) {
 }
 
 ## dense Levenberg-Marquardt
+\donttest{
 gsl_nls_large(
   fn = f,                       ## model
   y = rep(0, p + 1),            ## (dummy) responses
@@ -169,8 +170,10 @@ gsl_nls_large(
   jac = jac,                    ## jacobian
   control = list(maxiter = 250)
 )
+}
 
 ## dense Steihaug-Toint conjugate gradient
+\donttest{
 gsl_nls_large(
   fn = f,                       ## model
   y = rep(0, p + 1),            ## (dummy) responses
@@ -178,6 +181,7 @@ gsl_nls_large(
   jac = jac,                    ## jacobian
   algorithm = "cgst"            ## algorithm
 )
+}
 
 ## sparse Jacobian function
 jacsp <- function(theta) {
