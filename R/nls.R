@@ -65,6 +65,22 @@
 #' searches a larger subspace for a solution, it can converge more quickly than \code{"dogleg"}
 #' on some problems.
 #' }
+#' @param loss character string specifying the loss function to optimize. The following choices are supported:
+#' \itemize{
+#' \item \code{"default"} default squared loss function.
+#' \item \code{"huber"} Huber loss function.
+#' \item \code{"barron"} Barron's smooth family of loss functions.
+#' \item \code{"biweight"} Tukey's biweight/bisquare loss function.
+#' \item \code{"welsh"} Welsh/Leclerc loss function.
+#' \item \code{"optimal"} Optimal loss function (Maronna et al. (2006), Section 5.9.1).
+#' \item \code{"hampel"} Hampel loss function.
+#' \item \code{"ggw"} Generalized Gauss-Weight loss function.
+#' \item \code{"lqq"} Linear Quadratic Quadratic loss function.
+#' }
+#' If a character string, the default tuning parameters as specified by \code{\link{gsl_nls_loss}} are used.
+#' Instead, a list as returned by \code{\link{gsl_nls_loss}} with non-default tuning parameters is also accepted.
+#' For all choices other than \code{rho = "default"}, iterative reweighted least squares (IRLS) is used to
+#' solve the MM-estimation problem.
 #' @param control an optional list of control parameters to tune the least squares iterations and multistart algorithm.
 #' See \code{\link{gsl_nls_control}} for the available control parameters and their default values.
 #' @param lower	a named list or named numeric vector of parameter lower bounds, or an unnamed numeric
@@ -92,8 +108,9 @@
 #' are printed after each iteration.
 #' @param subset an optional vector specifying a subset of observations to be used in the fitting process.
 #' This argument is only used if \code{fn} is defined as a \link{formula}.
-#' @param weights an optional numeric vector of (fixed) weights. When present, the objective function is
-#' weighted least squares.
+#' @param weights an optional numeric vector of (fixed) weights of length \code{n} or an \code{n}-by-\code{n}
+#' symmetric positive definite weight matrix. If \code{weights} is a vector or a diagonal matrix, the objective function is weighted least squares.
+#' If \code{weights} is a general matrix, the objective function is generalized least squares.
 #' @param na.action a function which indicates what should happen when the data contain \code{NA}s. The
 #' default is set by the \code{na.action} setting of \code{\link{options}}, and is \code{\link{na.fail}} if that is unset.
 #' The 'factory-fresh' default is \code{\link{na.omit}}. Value \code{\link{na.exclude}} can be useful.
@@ -109,9 +126,10 @@
 #' applicable to objects of both classes.
 #' @useDynLib gslnls, .registration = TRUE
 #' @importFrom stats nls numericDeriv deriv as.formula coef deviance df.residual fitted vcov formula getInitial model.weights
-#' @importFrom stats pf pt qt setNames sigma nobs hatvalues
+#' @importFrom stats pf pt qt setNames sigma nobs hatvalues printCoefmat symnum cooks.distance naprint
 #' @seealso \code{\link[stats]{nls}}
 #' @seealso \url{https://www.gnu.org/software/gsl/doc/html/nls.html}
+#' @seealso \url{https://CRAN.R-project.org/package=robustbase/vignettes/psi_functions.pdf}
 #' @references M. Galassi et al., \emph{GNU Scientific Library Reference Manual (3rd Ed.)}, ISBN 0954612078.
 #' @references Hickernell, F.J. and Yuan, Y. (1997) \emph{“A simple multistart algorithm for global optimization”}, OR Transactions, Vol. 1 (2).
 #' @examples
@@ -145,6 +163,14 @@
 #'   fn = y ~ A * exp(-lam * x) + b,                        ## model formula
 #'   data = data.frame(x = x, y = y),                       ## model fit data
 #'   start = c(A = NA, lam = NA, b = NA)                    ## dynamic starting ranges
+#' )
+#'
+#' ## robust regression
+#' gsl_nls(
+#'   fn = y ~ A * exp(-lam * x) + b,                      ## model formula
+#'   data = data.frame(x = x, y = y),                     ## model fit data
+#'   start = c(A = 0, lam = 0, b = 0),                    ## starting values
+#'   loss = "barron"                                      ## L1-L2 loss
 #' )
 #'
 #' ## analytic Jacobian 1
@@ -285,11 +311,12 @@ gsl_nls <- function (fn, ...) {
 #' If \code{fn} is a \code{formula}, the returned list object is of classes \code{gsl_nls} and \code{nls}.
 #' Therefore, all generic functions applicable to objects of class \code{nls}, such as \code{anova}, \code{coef}, \code{confint},
 #' \code{deviance}, \code{df.residual}, \code{fitted}, \code{formula}, \code{logLik}, \code{nobs}, \code{predict}, \code{print}, \code{profile},
-#' \code{residuals}, \code{summary}, \code{vcov} and \code{weights} are also applicable to the returned list object.
+#' \code{residuals}, \code{summary}, \code{vcov}, \code{hatvalues}, \code{cooks.distance} and \code{weights} are also applicable to the returned list object.
 #' In addition, a method \code{confintd} is available for inference of derived parameters.
 #' @export
 gsl_nls.formula <- function(fn, data = parent.frame(), start,
                             algorithm = c("lm", "lmaccel", "dogleg", "ddogleg", "subspace2D"),
+                            loss = c("default", "huber", "barron", "bisquare", "welsh", "optimal", "hampel", "ggw", "lqq"),
                             control = gsl_nls_control(), lower, upper, jac = NULL, fvv = NULL,
                             trace = FALSE, subset, weights, na.action, model = FALSE, ...) {
 
@@ -413,7 +440,6 @@ gsl_nls.formula <- function(fn, data = parent.frame(), start,
   ## then it is probably a variable.
   ## This may fail (e.g. when LHS contains parameters):
   respLength <- length(eval(formula[[2L]], data, env))
-
   if(length(n) > 0L) {
     varIndex <- n %% respLength == 0
     if(is.list(data) && diff(range(n[names(n) %in% names(data)])) > 0) {
@@ -447,7 +473,7 @@ gsl_nls.formula <- function(fn, data = parent.frame(), start,
         as.formula(paste("~", paste(vNms, collapse = "+")),
                    env = environment(formula))
       mf$start <- mf$control <- mf$algorithm <- mf$trace <- mf$model <-
-        mf$fn <- mf$jac <- mf$fvv <- mf$lower <- mf$upper <- NULL
+        mf$fn <- mf$jac <- mf$fvv <- mf$lower <- mf$upper <- mf$loss <- NULL
       ## need stats:: for non-standard evaluation
       mf[[1L]] <- quote(stats::model.frame)
       mf <- eval.parent(mf)
@@ -455,8 +481,21 @@ gsl_nls.formula <- function(fn, data = parent.frame(), start,
       mf <- as.list(mf)
       wts <- if (!mWeights) model.weights(mf) else NULL
     }
-    if (!is.null(wts) && any(wts < 0 | is.na(wts)))
-      stop("missing or negative weights not allowed")
+    if(!is.null(wts)) {
+      stopifnot(
+        "'weights' should be numeric" =  is.numeric(wts),
+        "missing weights not allowed" = !any(is.na(wts))
+      )
+      if(is.matrix(wts)) {
+        ## error if non-positive definite
+        .swts <- t(chol(wts))
+      } else {
+        stopifnot("non-positive weights not allowed" = all(wts > 0))
+        .swts <- sqrt(wts)
+      }
+    } else {
+      .swts <- NULL
+    }
   }
   else {
     stop("no data variables present")
@@ -615,6 +654,14 @@ gsl_nls.formula <- function(fn, data = parent.frame(), start,
     }
   }
 
+  ## loss function
+  if(is.character(loss)) {
+    .loss_config <- gsl_nls_loss(rho = loss)
+  } else {
+    .loss_config <- do.call(gsl_nls_loss, args = as.list(loss))
+  }
+  .loss_config$rho <- match(.loss_config$rho, c("default", "huber", "barron", "bisquare", "welsh", "optimal", "hampel", "ggw", "lqq"), nomatch = 1L) - 1L
+
   ## control arguments
   trace <- isTRUE(trace)
   .ctrl <- do.call(gsl_nls_control, args = if(!missing(control)) as.list(control) else list())
@@ -639,7 +686,9 @@ gsl_nls.formula <- function(fn, data = parent.frame(), start,
     is.numeric(.ctrl$mstart_tol), length(.ctrl$mstart_tol) == 1, .ctrl$mstart_tol > 0,
     is.numeric(.ctrl$mstart_maxiter), length(.ctrl$mstart_maxiter) == 1, .ctrl$mstart_maxiter >= 1,
     is.numeric(.ctrl$mstart_maxstart), length(.ctrl$mstart_maxstart) == 1, .ctrl$mstart_maxstart >= 1,
-    is.numeric(.ctrl$mstart_minsp), length(.ctrl$mstart_minsp) == 1, .ctrl$mstart_minsp >= 1
+    is.numeric(.ctrl$mstart_minsp), length(.ctrl$mstart_minsp) == 1, .ctrl$mstart_minsp >= 1,
+    is.numeric(.ctrl$irls_maxiter), length(.ctrl$irls_maxiter) == 1, .ctrl$irls_maxiter >= 1,
+    is.numeric(.ctrl$irls_xtol), length(.ctrl$irls_xtol) == 1, .ctrl$irls_xtol > 0
   )
   .ctrl_int <- c(
     as.integer(.ctrl$maxiter),
@@ -655,18 +704,23 @@ gsl_nls.formula <- function(fn, data = parent.frame(), start,
     as.integer(.ctrl$mstart_maxiter),
     as.integer(.ctrl$mstart_maxstart),
     as.integer(.ctrl$mstart_minsp),
-    as.integer(!is.list(start))
+    as.integer(!is.list(start)),
+    as.integer(.ctrl$irls_maxiter)
   )
-  .ctrl_dbl <- unlist(.ctrl[c("factor_up", "factor_down", "avmax", "h_df", "h_fvv", "xtol", "ftol", "gtol", "mstart_r", "mstart_tol")])
+  .ctrl_dbl <- unlist(.ctrl[c("factor_up", "factor_down", "avmax", "h_df", "h_fvv", "xtol", "ftol", "gtol", "mstart_r", "mstart_tol", "irls_xtol")])
   if(!all(.has_start)) {
     .ctrl_dbl[["mstart_r"]] <- 10 * .ctrl_dbl[["mstart_r"]]
   }
 
   ## optimize
-  cFit <- .Call(C_nls, .fn, .lhs, .jac, .fvv, environment(), start, wts, .lupars, .ctrl_int, .ctrl_dbl, .has_start, PACKAGE = "gslnls")
+  cFit <- .Call(
+    C_nls,
+    .fn, .lhs, .jac, .fvv, environment(), start, .swts, .lupars, .ctrl_int, .ctrl_dbl, .has_start, .loss_config,
+    PACKAGE = "gslnls"
+  )
 
   ## convert to nls object
-  m <- nlsModel(formula, mf, cFit$par, wts, jac)
+  m <- nlsModel(formula, mf, cFit, .swts, jac)
 
   convInfo <- list(
     isConv = as.logical(!cFit$conv),
@@ -698,6 +752,11 @@ gsl_nls.formula <- function(fn, data = parent.frame(), start,
     nls.out$lower <- .lupars[1L, ]
     nls.out$upper <- .lupars[2L, ]
   }
+  if(!is.null(cFit$irls)) {
+    nls.out$irls <- cFit$irls
+    nls.out$irls$irls_conv <- as.logical(!cFit$irls$irls_conv)
+  }
+
   class(nls.out) <- c("gsl_nls", "nls")
 
   return(nls.out)
@@ -713,11 +772,12 @@ gsl_nls.formula <- function(fn, data = parent.frame(), start,
 #' Although the returned object is not of class \code{nls}, the following generic functions remain
 #' applicable for an object of class \code{gsl_nls}: \code{anova}, \code{coef}, \code{confint}, \code{deviance},
 #' \code{df.residual}, \code{fitted}, \code{formula}, \code{logLik}, \code{nobs}, \code{predict}, \code{print},
-#' \code{residuals}, \code{summary}, \code{vcov} and \code{weights}. In addition, a method \code{confintd}
-#' is available for inference of derived parameters.
+#' \code{residuals}, \code{summary}, \code{vcov}, \code{hatvalues}, \code{cooks.distance} and \code{weights}.
+#' In addition, a method \code{confintd} is available for inference of derived parameters.
 #' @export
 gsl_nls.function <- function(fn, y, start,
                              algorithm = c("lm", "lmaccel", "dogleg", "ddogleg", "subspace2D"),
+                             loss = c("default", "huber", "barron", "bisquare", "welsh", "optimal", "hampel", "ggw", "lqq"),
                              control = gsl_nls_control(), lower, upper, jac = NULL, fvv = NULL,
                              trace = FALSE, weights, ...) {
 
@@ -892,6 +952,14 @@ gsl_nls.function <- function(fn, y, start,
     }
   }
 
+  ## loss function
+  if(is.character(loss)) {
+    .loss_config <- gsl_nls_loss(rho = loss)
+  } else {
+    .loss_config <- do.call(gsl_nls_loss, args = as.list(loss))
+  }
+  .loss_config$rho <- match(.loss_config$rho, c("default", "huber", "barron", "bisquare", "welsh", "optimal", "hampel", "ggw", "lqq"), nomatch = 1L) - 1L
+
   ## control arguments
   trace <- isTRUE(trace)
   .ctrl <- do.call(gsl_nls_control, args = if(!missing(control)) as.list(control) else list())
@@ -916,7 +984,9 @@ gsl_nls.function <- function(fn, y, start,
     is.numeric(.ctrl$mstart_tol), length(.ctrl$mstart_tol) == 1, .ctrl$mstart_tol > 0,
     is.numeric(.ctrl$mstart_maxiter), length(.ctrl$mstart_maxiter) == 1, .ctrl$mstart_maxiter >= 1,
     is.numeric(.ctrl$mstart_maxstart), length(.ctrl$mstart_maxstart) == 1, .ctrl$mstart_maxstart >= 1,
-    is.numeric(.ctrl$mstart_minsp), length(.ctrl$mstart_minsp) == 1, .ctrl$mstart_minsp >= 1
+    is.numeric(.ctrl$mstart_minsp), length(.ctrl$mstart_minsp) == 1, .ctrl$mstart_minsp >= 1,
+    is.numeric(.ctrl$irls_maxiter), length(.ctrl$irls_maxiter) == 1, .ctrl$irls_maxiter >= 1,
+    is.numeric(.ctrl$irls_xtol), length(.ctrl$irls_xtol) == 1, .ctrl$irls_xtol > 0
   )
   .ctrl_int <- c(
     as.integer(.ctrl$maxiter),
@@ -932,27 +1002,49 @@ gsl_nls.function <- function(fn, y, start,
     as.integer(.ctrl$mstart_maxiter),
     as.integer(.ctrl$mstart_maxstart),
     as.integer(.ctrl$mstart_minsp),
-    as.integer(!is.list(start))
+    as.integer(!is.list(start)),
+    as.integer(.ctrl$irls_maxiter)
   )
-  .ctrl_dbl <- unlist(.ctrl[c("factor_up", "factor_down", "avmax", "h_df", "h_fvv", "xtol", "ftol", "gtol", "mstart_r", "mstart_tol")])
+  .ctrl_dbl <- unlist(.ctrl[c("factor_up", "factor_down", "avmax", "h_df", "h_fvv", "xtol", "ftol", "gtol", "mstart_r", "mstart_tol", "irls_xtol")])
   if(!all(.has_start)) {
     .ctrl_dbl[["mstart_r"]] <- 10 * .ctrl_dbl[["mstart_r"]]
   }
 
   ## weights
   if(!missing(weights)) {
-    if(!is.numeric(weights) || !identical(length(weights), length(y)))
-      stop("'weights' should be numeric equal in length to 'y'")
-    if (any(weights < 0 | is.na(weights)))
-      stop("missing or negative weights not allowed")
+    stopifnot(
+      "'weights' should be numeric" =  is.numeric(weights),
+      "missing weights not allowed" =  !any(is.na(weights))
+    )
+    if(is.matrix(weights)) {
+      stopifnot(
+        "dimensions of 'weights' should be equal to length of 'y'" =  all(dim(weights) == length(y))
+      )
+      ## error if non-positive definite
+      .swts <- t(chol(weights))
+    } else {
+      stopifnot(
+        "'weights' should be equal in length to 'y'" = identical(length(weights), length(y)),
+        "non-positive weights not allowed" =  all(weights > 0)
+      )
+      .swts <- sqrt(weights)
+    }
   } else {
-    weights <- NULL
+    .swts <- NULL
   }
 
   ## optimize
-  cFit <- .Call(C_nls, .fn, y, .jac, .fvv, environment(), .start, weights, .lupars, .ctrl_int, .ctrl_dbl, .has_start, PACKAGE = "gslnls")
+  cFit <- .Call(
+    C_nls,
+    .fn, y, .jac, .fvv, environment(), .start, .swts, .lupars, .ctrl_int, .ctrl_dbl, .has_start, .loss_config,
+    PACKAGE = "gslnls"
+  )
 
-  m <- gslModel(fn, y, cFit, if(!all(.has_start) && is.list(start)) as.list(.start[1L, ]) else if(!all(.has_start) || is.matrix(start)) .start[1L, ] else .start, weights, jac, ...)
+  m <- gslModel(
+    fn, y, cFit,
+    if(!all(.has_start) && is.list(start)) as.list(.start[1L, ]) else if(!all(.has_start) || is.matrix(start)) .start[1L, ] else .start,
+    .swts, jac, ...
+  )
 
   ## mimick nls object
   convInfo <- list(
@@ -974,11 +1066,15 @@ gsl_nls.function <- function(fn, y, start,
     nls.out$devtrace <- cFit$ssrtrace[seq_len(cFit$niter + 1L)]
   }
   nls.out$control <- .ctrl
-  if(!is.null(weights))
+  if(!missing(weights))
     nls.out$weights <- weights
   if(!is.null(.lupars)) {
     nls.out$lower <- .lupars[1L, ]
     nls.out$upper <- .lupars[2L, ]
+  }
+  if(!is.null(cFit$irls)) {
+    nls.out$irls <- cFit$irls
+    nls.out$irls$irls_conv <- as.logical(!cFit$irls$irls_conv)
   }
   class(nls.out) <- "gsl_nls"
 
@@ -1035,7 +1131,7 @@ gsl_nls.function <- function(fn, y, start,
 #' @param ftol numeric value, termination occurs when the relative change in sum of squared residuals between iterations is \code{<= ftol},
 #' defaults to \code{sqrt(.Machine$double.eps)}.
 #' @param gtol numeric value, termination occurs when the relative size of the gradient of the sum of squared residuals is \code{<= gtol},
-#' indicating a local minimum, defaults to \code{.Machine$double.eps^(1/3)}
+#' indicating a local minimum, defaults to \code{sqrt(.Machine$double.eps)}
 #' @param mstart_n positive integer, number of quasi-random points drawn in each major iteration, parameter \code{N} in Hickernell and Yuan (1997). Default is 30.
 #' @param mstart_p positive integer, number of iterations of inexpensive local search to concentrate the sample, parameter \code{p} in Hickernell and Yuan (1997). Default is 5.
 #' @param mstart_q positive integer, number of points retained in the concentrated sample, parameter \code{q} in Hickernell and Yuan (1997). Default is \code{mstart_n \%/\% 10}..
@@ -1046,6 +1142,9 @@ gsl_nls.function <- function(fn, y, start,
 #' @param mstart_maxiter positive integer, maximum number of iterations in the efficient local search algorithm (Algorithm B, Hickernell and Yuan (1997)), defaults to 10.
 #' @param mstart_maxstart positive integer, minimum number of major iterations (Algorithm 2.1, Hickernell and Yuan (1997)) before the multi-start algorithm terminates, defaults to 250.
 #' @param mstart_minsp positive integer, minimum number of detected stationary points before the multi-start algorithm terminates, defaults to 1.
+#' @param irls_maxiter positive integer, maximum number of IRLS iterations, defaults to 50. Only used in case of a non-default loss function (\code{loss != "default"}) optimized by IRLS.
+#' @param irls_xtol numeric value, termination of the IRLS procedure occurs when the relative change in parameters between IRLS iterations is \code{<= irls_xtol}, defaults to \code{.Machine$double.eps^(1/4)}.
+#' Only used in case of a non-default loss function (\code{loss != "default"}) optimized by IRLS.
 #' @param ... any additional arguments (currently not used).
 #' @importFrom stats nls.control
 #' @seealso \code{\link[stats]{nls.control}}
@@ -1054,7 +1153,7 @@ gsl_nls.function <- function(fn, y, start,
 #' @examples
 #' ## default tuning parameters
 #' gsl_nls_control()
-#' @return A \code{list} with exactly twenty-one components:
+#' @return A \code{list} with exactly twenty-three components:
 #' \itemize{
 #' \item maxiter
 #' \item scale
@@ -1077,6 +1176,8 @@ gsl_nls.function <- function(fn, y, start,
 #' \item mstart_maxiter
 #' \item mstart_maxstart
 #' \item mstart_minsp
+#' \item irls_maxiter
+#' \item irls_xtol
 #' }
 #' with meanings as explained under 'Arguments'.
 #' @references M. Galassi et al., \emph{GNU Scientific Library Reference Manual (3rd Ed.)}, ISBN 0954612078.
@@ -1087,7 +1188,8 @@ gsl_nls_control <- function(maxiter = 100, scale = "more", solver = "qr",
                             h_df = sqrt(.Machine$double.eps), h_fvv = 0.02, xtol = sqrt(.Machine$double.eps),
                             ftol = sqrt(.Machine$double.eps), gtol = sqrt(.Machine$double.eps),
                             mstart_n = 30, mstart_p = 5, mstart_q = mstart_n %/% 10, mstart_r = 4, mstart_s = 2,
-                            mstart_tol = 0.25, mstart_maxiter = 10, mstart_maxstart = 250, mstart_minsp = 1, ...) {
+                            mstart_tol = 0.25, mstart_maxiter = 10, mstart_maxstart = 250, mstart_minsp = 1,
+                            irls_maxiter = 50, irls_xtol = .Machine$double.eps**.25, ...) {
 
   scale <- match.arg(scale, c("more", "levenberg", "marquardt"))
   solver <- match.arg(solver, c("qr", "cholesky", "svd"))
@@ -1111,7 +1213,9 @@ gsl_nls_control <- function(maxiter = 100, scale = "more", solver = "qr",
     is.numeric(mstart_tol), length(mstart_tol) == 1, mstart_tol > 0,
     is.numeric(mstart_maxiter), length(mstart_maxiter) == 1, mstart_maxiter >= 1,
     is.numeric(mstart_maxstart), length(mstart_maxstart) == 1, mstart_maxstart >= 1,
-    is.numeric(mstart_minsp), length(mstart_minsp) == 1, mstart_minsp >= 1
+    is.numeric(mstart_minsp), length(mstart_minsp) == 1, mstart_minsp >= 1,
+    is.numeric(irls_maxiter), length(irls_maxiter) == 1, irls_maxiter >= 1,
+    is.numeric(irls_xtol), length(irls_xtol) == 1, irls_xtol > 0
   )
 
   list(maxiter = as.integer(maxiter), scale = scale, solver = solver, fdtype = fdtype,
@@ -1120,13 +1224,14 @@ gsl_nls_control <- function(maxiter = 100, scale = "more", solver = "qr",
        mstart_n = as.integer(mstart_n), mstart_p = as.integer(mstart_p), mstart_q = as.integer(mstart_q),
        mstart_r = mstart_r, mstart_s = as.integer(mstart_s), mstart_tol = mstart_tol,
        mstart_maxiter = as.integer(mstart_maxiter), mstart_maxstart = as.integer(mstart_maxstart),
-       mstart_minsp = as.integer(mstart_minsp))
+       mstart_minsp = as.integer(mstart_minsp), irls_maxiter = as.integer(irls_maxiter), irls_xtol = irls_xtol)
 
 }
 
-nlsModel <- function(form, data, start, wts, jac, upper=NULL) {
+nlsModel <- function(form, data, cFit, swts, jac, upper=NULL) {
   ## thisEnv <- environment() # shared by all functions in the 'm' list; variable no longer needed
   env <- new.env(hash = TRUE, parent = environment(form))
+  start <- cFit$par
   for(i in names(data)) env[[i]] <- data[[i]]
   ind <- as.list(start)
   parLength <- 0L
@@ -1145,10 +1250,10 @@ nlsModel <- function(form, data, start, wts, jac, upper=NULL) {
   useParams <- rep_len(TRUE, parLength)
   lhs <- eval(form[[2L]], envir = env)
   rhs <- eval(form[[3L]], envir = env)
-  .swts <- if(!missing(wts) && length(wts)) sqrt(wts) else rep_len(1, length(rhs))
+  .swts <- if(!missing(swts) && length(swts)) swts else rep_len(1, length(rhs))
   env$.swts <- .swts
-  resid <- .swts * (lhs - rhs)
-  dev <- sum(resid^2)
+  resid <- -cFit$resid
+  dev <- cFit$ssr
   if(is.null(attr(rhs, "gradient"))) {
     getRHS.noVarying <- function() numericDeriv(form[[3L]], names(ind), env)
     getRHS <- getRHS.noVarying
@@ -1187,10 +1292,15 @@ nlsModel <- function(form, data, start, wts, jac, upper=NULL) {
     attr(rhs, "gradient") <- gr <- as.vector(gr)
 
   if(!any(is.na(gr) | is.infinite(gr))) {
-    QR <- qr(.swts * gr)
+    QR <- if(is.matrix(.swts)) qr(.swts %*% gr) else qr(.swts * gr)
     qrDim <- min(dim(QR$qr))
     if(QR$rank < qrDim)
       warning("singular gradient matrix at parameter estimates")
+    if(!is.null(cFit$irls)) {
+      ## MM correction [Yohai, 1987. Thrm. 4.1]
+      tau <- mean(cFit$irls$irls_psi^2) / mean(cFit$irls$irls_dpsi)^2
+      QR$qr <- QR$qr / sqrt(tau)
+    }
   } else {
     qrDim <- 0L
     stop("NA/NaN/Inf in gradient matrix at parameter estimates")
@@ -1230,7 +1340,13 @@ nlsModel <- function(form, data, start, wts, jac, upper=NULL) {
             formula = function() form,
             deviance = function() dev,
             lhs = function() lhs,
-            gradient = function() .swts * attr(rhs, "gradient"),
+            gradient = function() {
+              if(is.matrix(.swts)) {
+                .swts %*% attr(rhs, "gradient")
+              } else {
+                .swts * attr(rhs, "gradient")
+              }
+            },
             gradient1 = function(newdata = list()) {
               rho <- new.env(hash = TRUE, parent = env)
               for(i in names(newdata)) rho[[i]] <- newdata[[i]]
@@ -1272,10 +1388,11 @@ nlsModel <- function(form, data, start, wts, jac, upper=NULL) {
             },
             setPars = function(newPars) {
               setPars(newPars)
-              resid <<- .swts * (lhs - (rhs <<- getRHS())) # envir = thisEnv {2 x}
+              resid0 <- (lhs - (rhs <<- getRHS()))
+              resid <<- if(is.matrix(.swts)) c(.swts %*% resid0) else .swts * resid0 # envir = thisEnv {2 x}
               dev   <<- sum(resid^2) # envir = thisEnv
               if(length(gr <- attr(rhs, "gradient")) == 1L) gr <- c(gr)
-              QR <<- qr(.swts * gr) # envir = thisEnv
+              QR <<- if(is.matrix(.swts)) qr(.swts %*% gr) else qr(.swts * gr) # envir = thisEnv
               (QR$rank < min(dim(QR$qr))) # to catch the singular gradient matrix
             },
             getPars = function() getPars(),
@@ -1293,7 +1410,7 @@ nlsModel <- function(form, data, start, wts, jac, upper=NULL) {
   m
 }
 
-gslModel <- function(fn, lhs, cFit, start, wts, jac, ...) {
+gslModel <- function(fn, lhs, cFit, start, swts, jac, ...) {
   env <- new.env(hash = TRUE, parent = environment(fn))
   env$fn <- fn
   data <- list(...)
@@ -1313,13 +1430,25 @@ gslModel <- function(fn, lhs, cFit, start, wts, jac, ...) {
     gcall <- fcall
   }
   gcall[[2]] <- do.call(call, args = c(ifelse(is.list(start), "list", "c"), sapply(names(start), as.name)), quote = TRUE)
-  if(!any(is.na(cFit$grad) | is.infinite(cFit$grad))) {
-    QR <- qr(cFit$grad)
+  if(is.null(cFit$irls)) {
+    gr <- cFit$grad
+  } else {
+    .swts <- if(!missing(swts) && length(swts)) swts else rep_len(1, dim(cFit$grad)[1])
+    gr <- if(is.matrix(.swts)) .swts %*% cFit$grad else .swts * cFit$grad  ## weighted gradient
+    gr <- gr / sqrt(cFit$irls$irls_weights)  ## gradient w/o irls weights
+  }
+  if(!any(is.na(gr) | is.infinite(gr))) {
+    QR <- qr(gr)
     qrDim <- min(dim(QR$qr))
     if(QR$rank < qrDim)
       warning("singular gradient matrix at parameter estimates")
+    if(!is.null(cFit$irls)) {
+      ## MM correction [Yohai, 1987. Thrm. 4.1]
+      tau <- mean(cFit$irls$irls_psi^2) / mean(cFit$irls$irls_dpsi)^2
+      QR$qr <- QR$qr / sqrt(tau)
+    }
   } else {
-    QR <- structure(list(qr = cFit$grad), class = "qr")
+    QR <- structure(list(qr = gr), class = "qr")
     QR$qr[] <- NA_real_
     qrDim <- 0L
     warning("NA/NaN/Inf in gradient matrix at parameter estimates")
@@ -1330,7 +1459,7 @@ gslModel <- function(fn, lhs, cFit, start, wts, jac, ...) {
             formula = function() fn,
             deviance = function() cFit$ssr,
             lhs = function() lhs,
-            gradient = function() cFit$grad,
+            gradient = function() gr,
             gradient1 = function(newdata = list()) {
               rho <- new.env(hash = TRUE, parent = env)
               for(i in names(newdata)) rho[[i]] <- newdata[[i]]

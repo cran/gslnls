@@ -110,7 +110,6 @@ This argument is only used if \code{fn} is defined as a \link{formula}.}
 
 \item{...}{additional arguments passed to the calls of \code{fn}, \code{jac} and \code{fvv} if
 defined as functions.}
-
 }
 \value{
 If \code{fn} is a \code{formula} returns a list object of class \code{nls}.
@@ -128,8 +127,8 @@ the GNU Scientific Library (GSL).
 \item \code{gsl_nls_large(formula)}: If \code{fn} is a \code{formula}, the returned list object is of classes \code{gsl_nls} and \code{nls}.
 Therefore, all generic functions applicable to objects of class \code{nls}, such as \code{anova}, \code{coef}, \code{confint},
 \code{deviance}, \code{df.residual}, \code{fitted}, \code{formula}, \code{logLik}, \code{nobs}, \code{predict}, \code{print}, \code{profile},
-\code{residuals}, \code{summary}, \code{vcov} and \code{weights} are also applicable to the returned list object.
-In addition, a method \code{confintd} is available for inference of derived parameters.
+\code{residuals}, \code{summary}, \code{vcov}, \code{hatvalues}, \code{cooks.distance} and \code{weights} are also applicable to the returned
+list object. In addition, a method \code{confintd} is available for inference of derived parameters.
 
 \item \code{gsl_nls_large(function)}: If \code{fn} is a \code{function}, the first argument must be the vector of parameters and
 the function should return a numeric vector containing the nonlinear model evaluations at
@@ -139,8 +138,8 @@ vector returned by \code{fn}. The returned list object is (only) of class \code{
 Although the returned object is not of class \code{nls}, the following generic functions remain
 applicable for an object of class \code{gsl_nls}: \code{anova}, \code{coef}, \code{confint}, \code{deviance},
 \code{df.residual}, \code{fitted}, \code{formula}, \code{logLik}, \code{nobs}, \code{predict}, \code{print},
-\code{residuals}, \code{summary}, \code{vcov} and \code{weights}. In addition, a method \code{confintd}
-is available for inference of derived parameters.
+\code{residuals}, \code{summary}, \code{vcov}, \code{hatvalues}, \code{cooks.distance} and \code{weights}.
+In addition, a method \code{confintd} is available for inference of derived parameters.
 
 }}
 \examples{

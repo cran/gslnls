@@ -1,3 +1,16 @@
+# gslnls 1.4.0
+
+* Robust loss optimization added in `gsl_nls()` via argument `loss`  
+* `weights` in `gsl_nls()` accepts a matrix (in addition to a vector)
+  in which case the objective function is generalized least squares
+* Added new function `gsl_nls_loss()` 
+* Added new method `cooks.distance()`
+* Minor changes in `predict()` and `hatvalues()` for weighted NLS
+
+# gslnls 1.3.3
+
+* Fix standard errors `predict()` when using `newdata`
+
 # gslnls 1.3.2
 
 * Reverted to static Makevars.win (supplied by T. Kalibera)
